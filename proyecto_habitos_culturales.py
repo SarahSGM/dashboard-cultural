@@ -1,100 +1,101 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import LabelEncoder
 
-# Configuración de la página
-st.set_page_config(
-    page_title="Dashboard Cultural DANE",
-    page_icon="📊",
-    layout="wide"
-)
+# Configuración general del dashboard
+st.set_page_config(page_title="Hábitos Culturales en Colombia", layout="wide")
+st.title("Análisis de Participación Cultural en Colombia")
+st.markdown("""
+Este tablero interactivo presenta un análisis detallado sobre los hábitos culturales de los colombianos,
+utilizando datos del DANE. A través de gráficos, filtros y estadísticas, exploramos cómo factores sociodemográficos
+se relacionan con la asistencia y participación en actividades culturales.
+""")
 
-# Título
-st.title("📊 Análisis de Hábitos Culturales - DANE")
-st.markdown("---")
+# Cargar datos
+@st.cache_data
 
-# Carga de datos
-@st.cache_data  # Cache para mejor rendimiento
-def load_data():
-    try:
-        df = pd.read_excel("Ingeneria_caracteristicas.xlsx")
-        return df
-    except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
-        return pd.DataFrame()
+def cargar_datos():
+    df = pd.read_excel("Ingenieria_caracteristicas.xlsx")
+    return df
 
-df = load_data()
+df = cargar_datos()
 
-# Mostrar datos si se cargaron
-if not df.empty:
-    st.success("¡Datos cargados correctamente!")
-    
-    # Sidebar con filtros
-    st.sidebar.header("Filtros")
-    
-    # Filtro por sexo
-    sexo_options = df['Sexo'].unique()
-    selected_sexo = st.sidebar.multiselect(
-        "Seleccione sexo:",
-        options=sexo_options,
-        default=sexo_options
-    )
-    
-    # Filtro por edad
-    min_age = int(df['¿cuántos años cumplidos tiene?'].min())
-    max_age = int(df['¿cuántos años cumplidos tiene?'].max())
-    age_range = st.sidebar.slider(
-        "Rango de edad:",
-        min_value=min_age,
-        max_value=max_age,
-        value=(min_age, max_age)
-    
-    # Aplicar filtros
-    filtered_df = df[
-        (df['Sexo'].isin(selected_sexo)) & 
-        (df['¿cuántos años cumplidos tiene?'] >= age_range[0]) & 
-        (df['¿cuántos años cumplidos tiene?'] <= age_range[1])
-    ]
+# ---------------- LIMPIEZA DE DATOS ---------------- #
+# Eliminar columnas con todos los valores nulos
+df.dropna(axis=1, how='all', inplace=True)
 
-    # Métricas clave
-    st.subheader("Resumen Estadístico")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total registros", len(filtered_df))
-    with col2:
-        st.metric("Edad promedio", f"{filtered_df['¿cuántos años cumplidos tiene?'].mean():.1f} años")
-    with col3:
-        asistencia = filtered_df['En los últimos 12 meses, ¿usted asistió a teatro, ópera o danza?'].value_counts(normalize=True).get('Sí', 0)*100
-        st.metric("Asistencia a teatro/danza", f"{asistencia:.1f}%")
+# Imputación de valores faltantes (modo para categóricas)
+cat_cols = df.select_dtypes(include='object').columns
+for col in cat_cols:
+    df[col] = df[col].fillna(df[col].mode()[0])
 
-    # Visualizaciones
-    st.subheader("Distribución por Variables")
-    
-    # Gráfico 1: Participación cultural por edad
-    fig1, ax1 = plt.subplots()
-    sns.histplot(data=filtered_df, x='¿cuántos años cumplidos tiene?', hue='Sexo', kde=True, ax=ax1)
-    ax1.set_title("Distribución por Edad y Sexo")
-    st.pyplot(fig1)
-    
-    # Gráfico 2: Nivel educativo vs actividades culturales
-    st.markdown("### Participación Cultural por Nivel Educativo")
-    educacion_order = filtered_df['¿cuál es el nivel educativo más alto alcanzado?'].value_counts().index
-    fig2 = plt.figure(figsize=(10, 6))
-    sns.countplot(
-        data=filtered_df,
-        y='¿cuál es el nivel educativo más alto alcanzado?',
-        order=educacion_order,
-        hue='En los últimos 12 meses, ¿usted asistió a conciertos, recitales, presentaciones de música en espacios abiertos o cerrados en vivo?'
-    )
-    st.pyplot(fig2)
-    
-    # Mostrar datos filtrados
-    if st.checkbox("Mostrar datos filtrados"):
-        st.dataframe(filtered_df)
-else:
-    st.warning("No se encontraron datos para mostrar. Verifica tu archivo Excel.")
+# Rellenar numéricas con la mediana
+num_cols = df.select_dtypes(include=np.number).columns
+for col in num_cols:
+    df[col] = df[col].fillna(df[col].median())
 
-# Créditos
-st.markdown("---")
-st.caption("Proyecto académico - Datos del DANE | Desarrollado con Streamlit")
+# ---------------- FILTROS INTERACTIVOS ---------------- #
+st.sidebar.header("Filtros")
+sexo = st.sidebar.multiselect("Sexo", df['SEXO'].unique(), default=df['SEXO'].unique())
+edades = st.sidebar.slider("Edad", int(df['EDAD'].min()), int(df['EDAD'].max()), (18, 80))
+etnias = st.sidebar.multiselect("Etnia", df['ETNIA'].unique(), default=df['ETNIA'].unique())
+educacion = st.sidebar.multiselect("Nivel Educativo", df['NIVEL EDUCATIVO'].unique(), default=df['NIVEL EDUCATIVO'].unique())
+
+# Aplicar filtros
+df_filt = df[
+    (df['SEXO'].isin(sexo)) &
+    (df['EDAD'] >= edades[0]) & (df['EDAD'] <= edades[1]) &
+    (df['ETNIA'].isin(etnias)) &
+    (df['NIVEL EDUCATIVO'].isin(educacion))
+]
+
+# ---------------- ANÁLISIS EXPLORATORIO ---------------- #
+st.subheader("Distribución de Edad")
+st.bar_chart(df_filt['EDAD'].value_counts().sort_index())
+
+st.subheader("Distribución por Sexo")
+st.pyplot(sns.countplot(data=df_filt, x='SEXO'))
+
+st.subheader("Nivel Educativo")
+st.pyplot(sns.countplot(data=df_filt, y='NIVEL EDUCATIVO', order=df_filt['NIVEL EDUCATIVO'].value_counts().index))
+
+# ---------------- PARTICIPACIÓN CULTURAL ---------------- #
+st.header("Participación en Actividades Culturales")
+cultural_cols = [
+    'P3', 'P4', 'P5', 'ASISTENCIA BIBLIOTECA', 'ASISTENCIA CASAS DE CULTURA',
+    'ASISTENCIA CENTROS CUTURALES', 'ASISTENCIA MUSEOS', 'ASISTENCIA EXPOSICIONES',
+    'ASISTENCIA MONUMENTOS', 'ASISTENCIA CURSOS', 'PRACTICA CULTURAL', 'lee libros'
+]
+
+participacion = {}
+for col in cultural_cols:
+    participacion[col] = df_filt[col].value_counts(normalize=True).get('Sí', 0)
+
+st.bar_chart(pd.Series(participacion).sort_values())
+
+# ---------------- INGENIERÍA DE CARACTERÍSTICAS ---------------- #
+df_filt['PARTICIPA_CULTURAL'] = df_filt[cultural_cols].apply(lambda x: (x == 'Sí').sum(), axis=1)
+st.subheader("Participación Cultural Acumulada")
+st.hist_chart(df_filt['PARTICIPA_CULTURAL'])
+
+st.subheader("Relación Edad - Participación")
+st.scatter_chart(df_filt[['EDAD', 'PARTICIPA_CULTURAL']])
+
+# ---------------- DOCUMENTACIÓN ---------------- #
+st.sidebar.markdown("""
+**Información del Proyecto**
+- Fuente: DANE - Encuesta de Consumo Cultural
+- Autor: Sarah & Mia
+- Proyecto: PARCIAL III Ingeniería de Características
+""")
+
+st.sidebar.markdown("""
+**Instrucciones**
+1. Usa los filtros para explorar el comportamiento según edad, sexo, etnia y educación.
+2. Observa cómo se distribuye la participación cultural.
+3. Analiza la relación entre variables sociodemográficas y participación cultural.
+""")
