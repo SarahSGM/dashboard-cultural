@@ -1,3 +1,7 @@
+import os
+print("Ruta actual de trabajo:", os.getcwd())
+df = pd.read_excel("Ingenieria_caracteristicas.xlsx")
+
 import pandas as pd
 import streamlit as st
 import os
