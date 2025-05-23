@@ -15,7 +15,6 @@ warnings.filterwarnings('ignore')
 # SOLUCIÓN DE EMERGENCIA - ELIMINA ESTO LUEGO DE FUNCIONE
 import subprocess
 import sys
-subprocess.check_call([sys.executable, "-m", "pip", "install", "scikit-learn==1.3.0"])
 
 # =============================================================================
 # CONFIGURACIÓN DE LA PÁGINA Y ESTILOS CSS
